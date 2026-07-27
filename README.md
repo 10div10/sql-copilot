@@ -1,80 +1,93 @@
-# SQL Copilot — Interactive README
+# SQL Copilot
 
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue)]()
-[![Status](https://img.shields.io/badge/status-draft-yellow)]()
-[![Run Demo](https://img.shields.io/badge/run-demo-local-brightgreen)]()
+[![CI](https://github.com/10div10/sql-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/10div10/sql-copilot/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.12-blue)]()
 
-SQL Copilot translates natural-language questions into SQL and helps you run, test, and iterate on queries safely. This README includes a small interactive demo you can run locally to try NL→SQL conversion and execute queries on a sample dataset.
+Natural language → SQL. Upload a CSV or connect a Postgres/MySQL database, ask a question in plain English, get validated SQL and results back.
 
-Quick highlights
-- Interactive local demo (Streamlit) to try NL→SQL conversion and query an example SQLite DB.
-- Support for plugging in your LLM (OpenAI, other APIs) or using a simple fallback translator for offline demos.
-- Safety notes and recommended .gitignore entries to avoid committing secrets or DB dumps.
+## How it works
 
-Live / Interactive demo (local)
-1. Install dependencies
-   pip install -r requirements.txt
-   pip install streamlit
+```
+NL question
+  → embed question (bge-small-en-v1.5)
+  → RAG retrieval of relevant tables from schema index (ChromaDB)
+  → prompt built with schema context + target SQL dialect
+  → Groq (llama-3.3-70b) generates SQL
+  → sqlglot validates: blocks non-SELECT statements, rejects hallucinated
+    tables/columns, enforces a row limit, transpiles to the target dialect
+  → executed against the DB (read-only)
+  → on execution error, one LLM self-correction retry
+  → plain-language answer generated from the results
+```
 
-   Optional (LLM mode):
-   pip install openai python-dotenv
+RAG only kicks in once a schema has more than 6 tables — smaller schemas get the full schema in the prompt directly, skipping retrieval overhead.
 
-2. Copy environment example and add API key if you want to use an LLM:
-   cp .env.example .env
-   # set OPENAI_API_KEY or other provider key in .env
+## Stack
 
-3. Run the playground:
-   streamlit run interactive/playground.py
+- **Backend:** FastAPI
+- **LLM:** Groq (`llama-3.3-70b-versatile`)
+- **SQL validation:** sqlglot
+- **Schema RAG:** ChromaDB + sentence-transformers (`bge-small-en-v1.5`)
+- **DB support:** SQLite (from uploaded CSV), Postgres, MySQL via SQLAlchemy
+- **Frontend:** static HTML/JS (no framework), talks to the FastAPI backend directly
 
-4. In the demo:
-   - Enter a natural-language request (e.g. "List top 5 customers by revenue in 2024").
-   - Click "Translate" to show the generated SQL.
-   - Click "Run SQL" to execute it against an in-memory sample SQLite DB and view results.
+## Setup
 
-Why this README is "interactive"
-- It ships a lightweight Streamlit playground so reviewers and maintainers can try NL→SQL without provisioning a DB or keys.
-- The playground supports two modes:
-  - LLM mode (requires API key) — demonstrates production-style usage.
-  - Fallback mode (no key) — shows a deterministic / heuristic conversion so the demo always runs offline.
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-Quickstart (CLI)
-- Translate and print SQL (example CLI wrapper):
-  python -m sql_copilot.cli --nl "Give me the top 10 orders by amount"
+export GROQ_API_KEY="your_key_here"
+uvicorn main:app --reload --port 8000
+```
 
-- Run the local Streamlit demo:
-  streamlit run interactive/playground.py
+Open `frontend/index.html` in a browser.
 
-Playground (what the demo does)
-- Builds a small example SQLite DB (tables: customers, orders, products).
-- Shows schema and sample rows.
-- Accepts a NL question and:
-  - If OPENAI_API_KEY (or other provider env var) is present, calls the provider to convert NL→SQL using a safe prompt template that includes schema and execution constraints.
-  - Otherwise uses a conservative heuristic fallback to create a simple SELECT query or asks the user to refine the request.
-- Executes SQL and displays results in a table with an execution trace.
+Get a free Groq API key at [console.groq.com](https://console.groq.com) — no credit card required.
 
-Security / Safety
-- Never commit real DB dumps, credentials, or production data to this repo.
-- Add these to `.gitignore`:
-  - .env
-  - *.db
-  - data/
-  - dbs/
-  - models/
-  - checkpoints/
-  - logs/
-- When using external LLMs, sanitize or avoid sending sensitive data to third-party APIs. Prefer local models or private endpoints for regulated data.
+## API
 
-Contributing
-- Please add tests for any new translator logic.
-- Keep example/data generation deterministic (seeded random) so demos are reproducible.
-- If adding new provider integrations, add an example provider config to `docs/providers.md` (do not include secrets).
+| Endpoint | Method | Description |
+|---|---|---|
+| `/upload` | POST | Upload a CSV, builds a SQLite dataset + indexes its schema |
+| `/connect` | POST | Connect an existing Postgres/MySQL DB via SQLAlchemy connection string |
+| `/query` | POST | Ask a question. Returns `{sql, columns, rows, answer}` |
+| `/health` | GET | Health check |
 
-Troubleshooting
-- If you see errors in playground:
-  - Ensure Python >= 3.8 is used.
-  - If using LLM mode, confirm OPENAI_API_KEY is set and you have network access.
-  - If streamlit is slow, reduce the sample DB size or run with fewer UI widgets.
+## Safety
 
-License & Contact
-- MIT License (or choose appropriate license).
-- Maintainer: @10div10 — open issues or PRs for improvements.
+- Only `SELECT` statements are ever executed — `sql_guard.py` parses and rejects `DROP`, `DELETE`, `UPDATE`, `INSERT`, `ALTER`, `TRUNCATE`, `CREATE`, `GRANT`.
+- Generated SQL is checked against the known schema before execution — hallucinated tables/columns are rejected, not silently run.
+- A row limit is enforced on every query if the LLM doesn't add one.
+- For production Postgres/MySQL connections, use a read-only DB user.
+
+## Tests
+
+```bash
+cd backend
+pip install pytest httpx
+export GROQ_API_KEY=dummy
+pytest tests/ -v
+```
+
+Covers: SQL guard rejection of destructive/hallucinated/malformed queries, CSV → SQLite loading, and the health endpoint. Runs automatically on every push via GitHub Actions.
+
+## Project structure
+
+```
+backend/
+  main.py            FastAPI app - /upload, /connect, /query
+  db.py               engine setup for sqlite/postgres/mysql, CSV loader
+  schema_store.py      schema introspection + Chroma RAG index
+  sql_guard.py         sqlglot-based validation and dialect transpilation
+  llm.py               Groq calls: generate SQL, self-correct, explain results
+  tests/
+frontend/
+  index.html           upload/connect UI, question box, results view
+```
+
+## License
+
+MIT
