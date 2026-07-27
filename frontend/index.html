@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Queryline — ask your data anything</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0F1B1E;
+    --panel: #16262A;
+    --panel-raised: #1C2F34;
+    --line: #2A4247;
+    --ink: #E9EDE9;
+    --ink-dim: #93A6A3;
+    --amber: #E8A33D;
+    --amber-dim: #6B5230;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    min-height:100vh;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(232,163,61,0.06), transparent 40%),
+      radial-gradient(circle at 100% 30%, rgba(63,167,150,0.05), transparent 45%);
+  }
+  .wrap{max-width: 880px; margin: 0 auto; padding: 48px 24px 80px;}
+
+  header{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;}
+  .brand{font-family:'Fraunces', serif; font-size:26px; font-weight:600; letter-spacing:-0.01em;}
+  .brand span{color:var(--amber);}
+  .tag{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-dim); letter-spacing:0.08em; text-transform:uppercase;}
+
+  .lede{color:var(--ink-dim); font-size:15px; line-height:1.6; margin: 4px 0 40px; max-width:56ch;}
+
+  /* Signature element: the translation strip */
+  .translate-strip{
+    display:flex; align-items:center; gap:14px;
+    font-family:'IBM Plex Mono', monospace; font-size:13px;
+    background: var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:14px 18px; margin-bottom:40px; overflow:hidden; position:relative;
+  }
+  .translate-strip .nl{color:var(--ink-dim); white-space:nowrap;}
+  .translate-strip .arrow{color:var(--amber); flex-shrink:0;}
+  .translate-strip .sql{color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .translate-strip .kw{color:var(--amber);}
+
+  section{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .step-label{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--amber);
+    letter-spacing:0.08em; text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; gap:8px;
+  }
+  .step-label::before{content:''; width:6px; height:6px; border-radius:50%; background:var(--amber); box-shadow:0 0 6px var(--amber);}
+
+  label{display:block; font-size:12px; color:var(--ink-dim); margin: 14px 0 6px; font-family:'IBM Plex Mono', monospace;}
+  label:first-of-type{margin-top:0;}
+
+  select, input[type=text], textarea{
+    width:100%; background: var(--panel-raised); border:1px solid var(--line);
+    color:var(--ink); padding:11px 12px; border-radius:8px; font-size:14px;
+    font-family:'Inter', sans-serif; transition: border-color 0.15s ease;
+  }
+  select:focus, input:focus, textarea:focus{outline:none; border-color:var(--amber);}
+  textarea{font-family:'IBM Plex Mono', monospace; font-size:13.5px; resize:vertical;}
+
+  input[type=file]{
+    width:100%; font-size:13px; color:var(--ink-dim);
+    background:var(--panel-raised); border:1px dashed var(--line); border-radius:8px; padding:16px;
+  }
+
+  button{
+    margin-top: 14px; padding: 11px 20px; cursor:pointer;
+    background: var(--amber); color:#1A1305; border:none; border-radius:7px;
+    font-family:'Inter', sans-serif; font-weight:600; font-size:13.5px;
+    transition: transform 0.1s ease, box-shadow 0.15s ease;
+  }
+  button:hover{box-shadow: 0 0 0 3px var(--amber-dim);}
+  button:active{transform: translateY(1px);}
+
+  #status{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-dim);
+    margin-top:14px; min-height:16px;
+  }
+  #status.error{color:#E86B4C;}
+  #status.ok{color:#7FBF9F;}
+
+  #resultSection{display:none;}
+  .answer-block{
+    font-size:15px; line-height:1.6; padding:16px 18px; background:var(--panel-raised);
+    border-left: 3px solid var(--amber); border-radius: 0 8px 8px 0; margin-bottom:20px;
+  }
+  h4{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-dim);
+    text-transform:uppercase; letter-spacing:0.08em; margin:20px 0 8px;
+  }
+  pre{
+    background: #0B1416; border:1px solid var(--line); padding:14px 16px;
+    border-radius:8px; overflow-x:auto; font-family:'IBM Plex Mono', monospace;
+    font-size:13px; color:#F0C77A; line-height:1.6;
+  }
+  table{border-collapse:collapse; width:100%; margin-top:6px; font-family:'IBM Plex Mono', monospace; font-size:12.5px;}
+  th{background:var(--panel-raised); color:var(--amber); text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); position:sticky; top:0;}
+  td{padding:7px 10px; border-bottom:1px solid var(--line); color:var(--ink-dim);}
+  tr:hover td{color:var(--ink);}
+  .table-scroll{max-height:340px; overflow:auto; border-radius:8px; border:1px solid var(--line);}
+
+  .platform-row{display:flex; gap:8px; margin-top:6px;}
+  .platform-row button{
+    flex:1; margin:0; padding:10px; background:var(--panel-raised); color:var(--ink-dim);
+    border:1px solid var(--line); font-weight:500; font-size:13px;
+  }
+  .platform-row button.active{background:var(--amber-dim); color:var(--amber); border-color:var(--amber);}
+
+  ::selection{background: var(--amber-dim); color:var(--ink);}
+
+  @media (max-width: 600px){
+    .wrap{padding: 32px 16px 60px;}
+    header{flex-direction:column; align-items:flex-start; gap:4px;}
+    .translate-strip{flex-wrap:wrap;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="brand">Query<span>line</span></div>
+    <div class="tag">Local · No cloud DB required</div>
+  </header>
+  <p class="lede">Ask your dataset a question in plain English. Queryline retrieves the relevant schema, writes SQL for your database dialect, validates it, and runs it — read-only, always.</p>
+
+  <div class="translate-strip" id="translateStrip">
+    <span class="nl">"top 5 customers by revenue"</span>
+    <span class="arrow">→</span>
+    <span class="sql"><span class="kw">SELECT</span> customer, <span class="kw">SUM</span>(revenue) <span class="kw">FROM</span> sales <span class="kw">GROUP BY</span> customer <span class="kw">ORDER BY</span> 2 <span class="kw">DESC LIMIT</span> 5</span>
+  </div>
+
+  <section>
+    <div class="step-label">01 — Connect a data source</div>
+
+    <label>Platform</label>
+    <div class="platform-row">
+      <button type="button" class="active" data-platform="sqlite" onclick="selectPlatform('sqlite')">SQLite (upload CSV)</button>
+      <button type="button" data-platform="postgres" onclick="selectPlatform('postgres')">Postgres</button>
+      <button type="button" data-platform="mysql" onclick="selectPlatform('mysql')">MySQL</button>
+    </div>
+
+    <div id="uploadBlock">
+      <label>Dataset (.csv)</label>
+      <input type="file" id="csvFile" accept=".csv">
+      <button onclick="uploadCSV()">Upload &amp; index schema</button>
+    </div>
+
+    <div id="connBlock" style="display:none">
+      <label>Connection string</label>
+      <input type="text" id="connStr" placeholder="postgresql+psycopg2://user:pass@host:5432/db">
+      <button onclick="connectDB()">Connect</button>
+    </div>
+
+    <p id="status"></p>
+  </section>
+
+  <section>
+    <div class="step-label">02 — Ask</div>
+    <label>Your question</label>
+    <textarea id="question" rows="3" placeholder="e.g. what were the top 5 products by revenue last month?"></textarea>
+    <button onclick="runQuery()">Run query</button>
+  </section>
+
+  <section id="resultSection">
+    <div class="step-label">03 — Result</div>
+    <div class="answer-block" id="answer"></div>
+    <h4>Generated SQL</h4>
+    <pre id="sqlOut"></pre>
+    <h4>Rows</h4>
+    <div class="table-scroll"><div id="tableOut"></div></div>
+  </section>
+
+</div>
+
+<script>
+const API = "http://localhost:8000";
+let sessionId = null;
+
+function selectPlatform(p){
+  document.querySelectorAll('.platform-row button').forEach(b => b.classList.toggle('active', b.dataset.platform === p));
+  document.getElementById("uploadBlock").style.display = p === "sqlite" ? "block" : "none";
+  document.getElementById("connBlock").style.display = p === "sqlite" ? "none" : "block";
+  window.currentPlatform = p;
+}
+window.currentPlatform = "sqlite";
+
+function setStatus(text, kind){
+  const el = document.getElementById("status");
+  el.innerText = text;
+  el.className = kind || "";
+}
+
+async function uploadCSV(){
+  const file = document.getElementById("csvFile").files[0];
+  if (!file) return setStatus("Choose a CSV first", "error");
+  const form = new FormData();
+  form.append("file", file);
+  setStatus("Uploading & indexing schema...");
+  try{
+    const res = await fetch(`${API}/upload`, { method: "POST", body: form });
+    if(!res.ok){ const e = await res.json(); return setStatus("Error: " + (e.detail || res.statusText), "error"); }
+    const data = await res.json();
+    sessionId = data.session_id;
+    setStatus(`Connected — tables: ${data.tables.join(", ")}`, "ok");
+  }catch(err){ setStatus("Connection failed: " + err.message, "error"); }
+}
+
+async function connectDB(){
+  sessionId = crypto.randomUUID();
+  const platform = window.currentPlatform;
+  const connStr = document.getElementById("connStr").value;
+  setStatus("Connecting & indexing schema...");
+  try{
+    const res = await fetch(`${API}/connect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, platform, conn_str: connStr }),
+    });
+    if(!res.ok){ const e = await res.json(); return setStatus("Error: " + (e.detail || res.statusText), "error"); }
+    const data = await res.json();
+    setStatus(`Connected — tables: ${data.tables.join(", ")}`, "ok");
+  }catch(err){ setStatus("Connection failed: " + err.message, "error"); }
+}
+
+async function runQuery(){
+  if (!sessionId) return setStatus("Connect a data source first", "error");
+  const question = document.getElementById("question").value.trim();
+  if (!question) return setStatus("Type a question first", "error");
+  setStatus("Generating SQL and running query...");
+
+  try{
+    const res = await fetch(`${API}/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, question, use_rag: true }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      setStatus("Error: " + (err.detail || res.statusText), "error");
+      return;
+    }
+
+    const data = await res.json();
+    setStatus("");
+    document.getElementById("resultSection").style.display = "block";
+    document.getElementById("answer").innerText = data.answer;
+    document.getElementById("sqlOut").innerText = data.sql;
+
+    let html = "<table><tr>" + data.columns.map(c => `<th>${c}</th>`).join("") + "</tr>";
+    for (const row of data.rows) {
+      html += "<tr>" + row.map(v => `<td>${v}</td>`).join("") + "</tr>";
+    }
+    html += "</table>";
+    document.getElementById("tableOut").innerHTML = html;
+    document.getElementById("resultSection").scrollIntoView({behavior:"smooth", block:"start"});
+  }catch(err){
+    setStatus("Request failed: " + err.message, "error");
+  }
+}
+</script>
+
+</body>
+</html>
